@@ -2,6 +2,8 @@
 
 A Python SDK for the Product Hunt API. Track trending products, discover new launches, and monitor your own products.
 
+**[Live Demo](https://domoryonok.github.io/producthunt-sdk/)** - See today's top Product Hunt launches, updated every 5 minutes.
+
 ## Quick Start
 
 ```bash

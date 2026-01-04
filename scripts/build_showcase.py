@@ -41,12 +41,6 @@ def generate_html(data: dict) -> str:
         thumbnail = post.thumbnail.url if post.thumbnail else ""
         thumbnail_html = f'<img src="{thumbnail}" alt="{post.name}" class="thumbnail">' if thumbnail else '<div class="thumbnail-placeholder"></div>'
 
-        # Show maker info if available
-        maker_html = ""
-        if post.makers:
-            maker = post.makers[0]
-            maker_html = f'<span class="maker">by {maker.name}</span>'
-
         post_cards += f'''
         <div class="bento-item {size_class}">
             <a href="{post.url}" target="_blank" class="post-link">
@@ -58,7 +52,6 @@ def generate_html(data: dict) -> str:
                         <span class="votes"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4l-8 8h5v8h6v-8h5z"/></svg> {post.votes_count}</span>
                         <span class="comments"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg> {post.comments_count}</span>
                     </div>
-                    {maker_html}
                 </div>
             </a>
         </div>'''
@@ -280,13 +273,6 @@ def generate_html(data: dict) -> str:
 
         .votes {{
             color: var(--accent) !important;
-        }}
-
-        .maker {{
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            display: block;
-            margin-top: 0.5rem;
         }}
 
         .topics-section {{
