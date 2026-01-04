@@ -36,7 +36,7 @@ def generate_html(data: dict) -> str:
 
     # Generate post cards
     post_cards = ""
-    for i, post in enumerate(posts[:6]):
+    for i, post in enumerate(posts):
         size_class = "large" if i == 0 else "small"
         thumbnail = post.thumbnail.url if post.thumbnail else ""
         thumbnail_html = f'<img src="{thumbnail}" alt="{post.name}" class="thumbnail">' if thumbnail else '<div class="thumbnail-placeholder"></div>'
