@@ -1,6 +1,6 @@
 """Product Hunt SDK - Python client for the Product Hunt API v2."""
 
-from .auth import BearerAuth, OAuth2, TokenCache
+from .auth import BearerAuth, ClientCredentials, OAuth2, TokenCache
 from .client import AsyncProductHuntClient, ProductHuntClient
 from .exceptions import (
     AuthenticationError,
@@ -48,6 +48,7 @@ __all__ = [
     "AsyncProductHuntClient",
     # Auth
     "BearerAuth",
+    "ClientCredentials",
     "OAuth2",
     "TokenCache",
     # Exceptions

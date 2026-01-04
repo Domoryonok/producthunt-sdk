@@ -120,6 +120,39 @@ async def main():
 asyncio.run(main())
 ```
 
+## Developer Token Authentication
+
+The simplest way to get started. Get a token from your [Product Hunt dashboard](https://www.producthunt.com/v2/oauth/applications).
+
+```python
+from producthunt_sdk import ProductHuntClient, BearerAuth
+
+client = ProductHuntClient(auth=BearerAuth("your_developer_token"))
+posts = client.get_posts(featured=True)
+```
+
+Developer tokens provide full API access including user-specific data for your own account.
+
+## Client Credentials Authentication
+
+Use client credentials for server-side applications that don't need user context. This is simpler than OAuth - no browser required.
+
+```python
+from producthunt_sdk import ProductHuntClient, ClientCredentials
+
+client = ProductHuntClient(auth=ClientCredentials(
+    client_id="your_client_id",
+    client_secret="your_client_secret",
+))
+
+# Access public data - token is fetched automatically
+posts = client.get_posts(featured=True)
+for post in posts.nodes:
+    print(f"{post.name}: {post.votes_count} votes")
+```
+
+**Limitations:** Client credentials only provide read access to public data. User-specific fields (`is_voted`, `viewer`, etc.) return default values.
+
 ## OAuth Authentication
 
 Use OAuth when building apps that authenticate users. This gives you access to the authenticated user's own data.
@@ -149,10 +182,13 @@ posts = client.get_user_posts(username=viewer.user.username)
 Tokens are cached in memory by default. For persistence across restarts:
 
 ```python
-from producthunt_sdk import OAuth2, TokenCache
+from producthunt_sdk import OAuth2, ClientCredentials, TokenCache
 
-# Use file-based cache
+# Use file-based cache for OAuth
 OAuth2.token_cache = TokenCache("~/.producthunt_tokens.json")
+
+# Or for ClientCredentials
+ClientCredentials.token_cache = TokenCache("~/.producthunt_tokens.json")
 ```
 
 See `examples/oauth_flow.py` for a complete example.

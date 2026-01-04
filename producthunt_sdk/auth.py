@@ -327,3 +327,117 @@ class OAuth2(httpx.Auth):
     def clear_token(self) -> None:
         """Clear the cached token, forcing re-authentication on next request."""
         self.token_cache.clear(self._cache_key)
+
+
+class ClientCredentials(httpx.Auth):
+    """Client credentials authentication for Product Hunt API.
+
+    This provides read-only access to public endpoints without requiring
+    user authorization. Use this for server-side applications that don't
+    need user context.
+
+    Note: Client-level tokens cannot access user-specific data. Fields like
+    `isVoted`, `viewer`, etc. will return default values (false, null).
+
+    Example:
+        ```python
+        from producthunt_sdk import ProductHuntClient, ClientCredentials
+
+        # Simple setup - no browser required
+        client = ProductHuntClient(auth=ClientCredentials(
+            client_id="your_client_id",
+            client_secret="your_client_secret",
+        ))
+
+        # Access public data
+        posts = client.get_posts(featured=True)
+        for post in posts.nodes:
+            print(f"{post.name}: {post.votes_count} votes")
+
+        # Note: user-specific fields return defaults
+        print(post.is_voted)  # Always False with client credentials
+        ```
+    """
+
+    TOKEN_URL = "https://api.producthunt.com/v2/oauth/token"
+
+    # Class-level cache and lock (shared across all instances)
+    token_cache = TokenCache()
+    _lock = threading.Lock()
+
+    def __init__(self, client_id: str, client_secret: str):
+        """Initialize client credentials authentication.
+
+        Args:
+            client_id: Your OAuth application client ID
+            client_secret: Your OAuth application client secret
+        """
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+        # Generate cache key from credentials
+        self._cache_key = hashlib.sha256(
+            f"client_credentials:{client_id}:{client_secret}".encode()
+        ).hexdigest()[:16]
+
+    def _get_cached_token(self) -> str | None:
+        """Get token from cache."""
+        return self.token_cache.get(self._cache_key)
+
+    def _cache_token(self, token: str) -> None:
+        """Store token in cache."""
+        self.token_cache.set(self._cache_key, token)
+
+    def _fetch_token(self) -> str:
+        """Fetch a new client credentials token.
+
+        Returns:
+            The access token
+
+        Raises:
+            httpx.HTTPStatusError: If token request fails
+        """
+        response = httpx.post(
+            self.TOKEN_URL,
+            json={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type": "client_credentials",
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+
+        access_token = response.json()["access_token"]
+        self._cache_token(access_token)
+
+        return access_token
+
+    def _ensure_token(self) -> str:
+        """Ensure we have a valid token, fetching one if needed."""
+        # Fast path: check cache without lock
+        cached = self._get_cached_token()
+        if cached:
+            return cached
+
+        # Slow path: acquire lock and fetch token
+        with self._lock:
+            # Double-check after acquiring lock
+            cached = self._get_cached_token()
+            if cached:
+                return cached
+
+            return self._fetch_token()
+
+    def auth_flow(self, request: httpx.Request):
+        """Add Authorization header to request."""
+        token = self._ensure_token()
+        request.headers["Authorization"] = f"Bearer {token}"
+        yield request
+
+    def clear_token(self) -> None:
+        """Clear the cached token, forcing a new token fetch on next request."""
+        self.token_cache.clear(self._cache_key)

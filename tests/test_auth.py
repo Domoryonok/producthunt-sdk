@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import httpx
 
-from producthunt_sdk import BearerAuth, OAuth2, TokenCache
+from producthunt_sdk import BearerAuth, ClientCredentials, OAuth2, TokenCache
 
 
 class TestBearerAuth:
@@ -307,3 +307,115 @@ class TestBearerAuthEdgeCases:
         modified_request = next(flow)
 
         assert modified_request.headers["Authorization"] == "Bearer token_with-special.chars_123"
+
+
+class TestClientCredentials:
+    """Tests for ClientCredentials."""
+
+    def test_cache_key_based_on_credentials(self):
+        """Different credentials produce different cache keys."""
+        auth1 = ClientCredentials(client_id="id1", client_secret="secret1")
+        auth2 = ClientCredentials(client_id="id2", client_secret="secret2")
+        auth3 = ClientCredentials(client_id="id1", client_secret="secret1")
+
+        assert auth1._cache_key != auth2._cache_key
+        assert auth1._cache_key == auth3._cache_key  # Same credentials = same key
+
+    def test_uses_cached_token(self):
+        """ClientCredentials returns cached token without fetching."""
+        auth = ClientCredentials(client_id="test", client_secret="test")
+        ClientCredentials.token_cache.set(auth._cache_key, "cached_token")
+
+        try:
+            with patch.object(ClientCredentials, "_fetch_token") as mock_fetch:
+                token = auth._ensure_token()
+
+                assert token == "cached_token"
+                mock_fetch.assert_not_called()
+        finally:
+            ClientCredentials.token_cache.clear()
+
+    def test_fetches_token_when_not_cached(self):
+        """ClientCredentials fetches token when cache is empty."""
+        ClientCredentials.token_cache.clear()
+
+        def mock_fetch(self):
+            token = "fetched_token_123"
+            self._cache_token(token)
+            return token
+
+        try:
+            with patch.object(ClientCredentials, "_fetch_token", mock_fetch):
+                auth = ClientCredentials(client_id="test", client_secret="test")
+                token = auth._ensure_token()
+
+                assert token == "fetched_token_123"
+        finally:
+            ClientCredentials.token_cache.clear()
+
+    def test_clear_token(self):
+        """clear_token() removes token from cache."""
+        auth = ClientCredentials(client_id="test", client_secret="test")
+        ClientCredentials.token_cache.set(auth._cache_key, "test_token")
+
+        auth.clear_token()
+
+        assert ClientCredentials.token_cache.get(auth._cache_key) is None
+
+    def test_adds_authorization_header(self):
+        """ClientCredentials adds Bearer token to request headers."""
+        auth = ClientCredentials(client_id="test", client_secret="test")
+        ClientCredentials.token_cache.set(auth._cache_key, "test_token")
+
+        try:
+            request = httpx.Request("GET", "https://api.example.com")
+            flow = auth.auth_flow(request)
+            modified_request = next(flow)
+
+            assert modified_request.headers["Authorization"] == "Bearer test_token"
+        finally:
+            ClientCredentials.token_cache.clear()
+
+    def test_thread_safety_single_fetch(self):
+        """Only one token fetch runs even with multiple concurrent threads."""
+        fetch_call_count = 0
+        fetch_call_lock = threading.Lock()
+
+        def mock_fetch(self):
+            nonlocal fetch_call_count
+            with fetch_call_lock:
+                fetch_call_count += 1
+
+            time.sleep(0.1)  # Simulate network delay
+            token = "mock_token_12345"
+            self._cache_token(token)
+            return token
+
+        ClientCredentials.token_cache.clear()
+
+        try:
+            with patch.object(ClientCredentials, "_fetch_token", mock_fetch):
+                results = {}
+                errors = {}
+
+                def worker(name):
+                    try:
+                        auth = ClientCredentials(client_id="test_id", client_secret="test_secret")
+                        token = auth._ensure_token()
+                        results[name] = token
+                    except Exception as e:
+                        errors[name] = str(e)
+
+                threads = [threading.Thread(target=worker, args=(f"T{i+1}",)) for i in range(5)]
+
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+
+                assert fetch_call_count == 1, f"Token fetch ran {fetch_call_count} times, expected 1"
+                assert len(results) == 5, f"Only {len(results)} threads completed"
+                assert len(errors) == 0, f"Errors occurred: {errors}"
+                assert all(t == "mock_token_12345" for t in results.values())
+        finally:
+            ClientCredentials.token_cache.clear()

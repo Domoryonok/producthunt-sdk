@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python SDK for the Product Hunt API v2 (GraphQL). Provides both sync and async clients with automatic rate limiting, retries, and Pydantic models.
 
-**Authentication**: Two options:
+**Authentication**: Three options:
 - Developer Token (simple): `BearerAuth("token")` - Get at https://www.producthunt.com/v2/oauth/applications
+- Client Credentials (server-side): `ClientCredentials(client_id, client_secret)` - No browser, public data only
 - OAuth (user auth): `OAuth2(client_id, client_secret)` - Auto handles browser flow, token caching
 
 **Data Access**: Product Hunt API has privacy restrictions - other users' data is redacted. Only your own profile data is fully accessible.
@@ -46,23 +47,25 @@ producthunt_sdk/
     ├── models.py        # Pydantic models for GraphQL types
     ├── queries.py       # GraphQL query/mutation strings with fragments
     ├── rate_limiter.py  # Rate limit handling with auto-wait
-    ├── auth.py          # BearerAuth, OAuth2, TokenCache
+    ├── auth.py          # BearerAuth, ClientCredentials, OAuth2, TokenCache
     └── exceptions.py    # Custom exceptions (all inherit ProductHuntError)
 
 examples/
-    ├── .env                    # Token storage (gitignored)
-    ├── .env.example            # Template for .env
-    ├── track_launch.py         # Track your launch performance
-    ├── find_trends.py          # Find trending products
-    ├── analyze_competitors.py  # Analyze competitor engagement
-    ├── my_profile.py           # View your own profile data
-    ├── oauth_flow.py           # OAuth flow demo
-    └── test_all_endpoints.py   # Manual test of all SDK methods
+    ├── .env                        # Token storage (gitignored)
+    ├── .env.example                # Template for .env
+    ├── track_launch.py             # Track your launch performance
+    ├── find_trends.py              # Find trending products
+    ├── analyze_competitors.py      # Analyze competitor engagement
+    ├── my_profile.py               # View your own profile data
+    ├── oauth_flow.py               # OAuth flow demo
+    ├── test_client_credentials.py  # Test ClientCredentials auth
+    └── test_all_endpoints.py       # Manual test of all SDK methods
 
 tests/
     ├── conftest.py          # Fixtures, mock transports, sample data
     ├── test_client.py       # Sync client tests
     ├── test_async_client.py # Async client tests
+    ├── test_auth.py         # Auth classes tests (BearerAuth, ClientCredentials, OAuth2)
     ├── test_models.py       # Pydantic model tests
     └── test_rate_limiter.py # Rate limiter tests
 ```
@@ -76,7 +79,15 @@ tests/
 from producthunt_sdk import ProductHuntClient, BearerAuth
 client = ProductHuntClient(auth=BearerAuth("your_token"))
 
-# OAuth (auto browser flow, token caching)
+# Client credentials (server-side, no browser, public data only)
+from producthunt_sdk import ProductHuntClient, ClientCredentials
+client = ProductHuntClient(auth=ClientCredentials(
+    client_id="...",
+    client_secret="...",
+))
+# Token fetched automatically on first request, cached for reuse
+
+# OAuth (auto browser flow, token caching, user-level access)
 from producthunt_sdk import ProductHuntClient, OAuth2
 client = ProductHuntClient(auth=OAuth2(
     client_id="...",
@@ -86,8 +97,9 @@ client = ProductHuntClient(auth=OAuth2(
 # First API call opens browser, handles callback, caches token
 
 # File-based token persistence
-from producthunt_sdk import OAuth2, TokenCache
+from producthunt_sdk import OAuth2, ClientCredentials, TokenCache
 OAuth2.token_cache = TokenCache("~/.producthunt_tokens.json")
+ClientCredentials.token_cache = TokenCache("~/.producthunt_tokens.json")
 ```
 
 ### Client (`client.py`)
